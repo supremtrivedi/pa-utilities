@@ -1,42 +1,72 @@
-import { pipeline } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
 
-class WhisperPipeline {
+// Configure environment
+env.allowLocalModels = false;
+
+class MyTranscriptionPipeline {
   static task = 'automatic-speech-recognition';
-  static model = 'Xenova/whisper-tiny.en';
+  static model = 'Xenova/whisper-tiny';
   static instance = null;
 
-  static async getInstance(progress_callback = null) {
-    if (this.instance === null) {
+  static async getInstance(model, progress_callback = null) {
+    if (this.instance === null || this.model !== model) {
+      this.model = model;
       this.instance = pipeline(this.task, this.model, { progress_callback });
     }
     return this.instance;
   }
 }
 
-self.onmessage = async function(event) {
-  const { type, data } = event.data;
+// Listen for messages from the UI
+self.addEventListener('message', async (event) => {
+  const { url, audio, model, language, subtask } = event.data;
   
-  if (type === 'TRANSCRIBE') {
-    try {
-      // Send loading status
-      self.postMessage({ type: 'LOADING', data: 0 });
-      
-      // Initialize the pipeline
-      const transcriber = await WhisperPipeline.getInstance((progress) => {
-        self.postMessage({ type: 'LOADING', data: Math.round(progress.progress * 100) });
+  console.log('Worker received message:', event.data); // Debug log
+  
+  try {
+    // Get the transcription pipeline
+    const transcriber = await MyTranscriptionPipeline.getInstance(model, (x) => {
+      // Send progress updates
+      self.postMessage(x);
+    });
+
+    let output;
+    
+    if (url) {
+      console.log('Processing URL:', url);
+      output = await transcriber(url, {
+        task: subtask,
+        language: language === 'english' ? 'english' : language,
+        return_timestamps: true,
+        chunk_length_s: 30,
+        stride_length_s: 5,
       });
+    } else if (audio) {
+      console.log('Processing audio blob:', audio);
       
-      // Convert blob to array buffer
-      const arrayBuffer = await data.arrayBuffer();
-      
-      // Transcribe the audio
-      const result = await transcriber(arrayBuffer);
-      
-      // Send the result
-      self.postMessage({ type: 'RESULT', data: result });
-      
-    } catch (error) {
-      self.postMessage({ type: 'ERROR', data: error.message });
+      // Process audio blob directly
+      output = await transcriber(audio, {
+        task: subtask,
+        language: language === 'english' ? 'english' : language,
+        return_timestamps: true,
+        chunk_length_s: 30,
+        stride_length_s: 5,
+      });
     }
+
+    console.log('Transcription output:', output); // Debug log
+
+    // Send the output back to the main thread
+    self.postMessage({
+      status: 'complete',
+      output: output,
+    });
+
+  } catch (error) {
+    console.error('Worker error:', error);
+    self.postMessage({
+      status: 'error',
+      error: error.message,
+    });
   }
-};
+});

@@ -316,3 +316,43 @@ progress[value]::-moz-progress-bar {
   margin-top: 4px;
 }
 
+/* ADD these lines to the END of your App.css - DO NOT REPLACE anything above */
+
+.tab-navigation {
+  display: flex;
+  background: var(--pa-white);
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--pa-light-gray);
+}
+
+.tab-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pa-medium-gray);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+  background: var(--pa-light-gray);
+  color: var(--pa-dark-gray);
+}
+
+.tab-button.active {
+  background: var(--pa-red);
+  color: var(--pa-white);
+  font-weight: 600;
+}
+
