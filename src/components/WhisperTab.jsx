@@ -28,55 +28,60 @@ function WhisperTab() {
   const recordingTimer = useRef(null);
 
   // Initialize worker exactly like original
-  useEffect(() => {
-    if (!worker.current) {
-      worker.current = new Worker(new URL('../whisper-worker.js', import.meta.url), {
-        type: 'module'
-      });
+ useEffect(() => {
+  if (!worker.current) {
+    worker.current = new Worker(new URL('../whisper-worker.js', import.meta.url), {
+      type: 'module'
+    });
+  }
+
+  const onMessageReceived = (e) => {
+    console.log('Worker message received:', e.data); // Debug log
+    
+    switch (e.data.status) {
+      case 'initiate':
+        setProgressItems(prev => [...prev, e.data]);
+        break;
+      case 'progress':
+        setProgressItems(prev => 
+          prev.map(item => {
+            if (item.file === e.data.file) {
+              return { ...item, progress: e.data.progress };
+            }
+            return item;
+          })
+        );
+        break;
+      case 'done':
+        setProgressItems(prev => prev.filter(item => item.file !== e.data.file));
+        break;
+      case 'ready':
+        console.log('Worker ready');
+        break;
+      case 'update':
+        setTranscription(e.data.output);
+        break;
+      case 'complete':
+        console.log('Transcription complete:', e.data.output);
+        setTranscription(e.data.output.text || e.data.output);
+        setIsTranscribing(false);
+        break;
+      case 'error':
+        console.error('Transcription error:', e.data.error);
+        setIsTranscribing(false);
+        break;
     }
+  };
 
-    const onMessageReceived = (e) => {
-      switch (e.data.status) {
-        case 'initiate':
-          setProgressItems(prev => [...prev, e.data]);
-          break;
-        case 'progress':
-          setProgressItems(prev => 
-            prev.map(item => {
-              if (item.file === e.data.file) {
-                return { ...item, progress: e.data.progress };
-              }
-              return item;
-            })
-          );
-          break;
-        case 'done':
-          setProgressItems(prev => prev.filter(item => item.file !== e.data.file));
-          break;
-        case 'ready':
-          // Model is ready
-          break;
-        case 'update':
-          setTranscription(e.data.output);
-          break;
-        case 'complete':
-          setIsTranscribing(false);
-          break;
-        case 'error':
-          console.error('Transcription error:', e.data.error);
-          setIsTranscribing(false);
-          break;
-      }
-    };
+  worker.current.addEventListener('message', onMessageReceived);
 
-    worker.current.addEventListener('message', onMessageReceived);
+  return () => {
+    if (worker.current) {
+      worker.current.removeEventListener('message', onMessageReceived);
+    }
+  };
+}, []);
 
-    return () => {
-      if (worker.current) {
-        worker.current.removeEventListener('message', onMessageReceived);
-      }
-    };
-  }, []);
 
   // URL processing
   const handleUrlSubmit = async () => {
@@ -118,41 +123,6 @@ function WhisperTab() {
     });
   };
 
-  // Recording functionality
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder.current = new MediaRecorder(stream);
-      audioChunks.current = [];
-      setRecordingTime(0);
-
-      mediaRecorder.current.ondataavailable = (event) => {
-        audioChunks.current.push(event.data);
-      };
-
-      mediaRecorder.current.onstop = () => {
-        const blob = new Blob(audioChunks.current, { type: 'audio/wav' });
-        setRecordedBlob(blob);
-        setAudioURL(URL.createObjectURL(blob));
-        
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
-        clearInterval(recordingTimer.current);
-      };
-
-      mediaRecorder.current.start();
-      setIsRecording(true);
-      
-      // Start timer
-      recordingTimer.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
-    } catch (error) {
-      console.error('Error starting recording:', error);
-    }
-  };
-
   const stopRecording = () => {
     if (mediaRecorder.current && isRecording) {
       mediaRecorder.current.stop();
@@ -161,20 +131,65 @@ function WhisperTab() {
     }
   };
 
-  const submitRecording = () => {
-    if (!recordedBlob) return;
-    
-    setIsTranscribing(true);
-    setTranscription('');
-    setProgressItems([]);
-    
-    worker.current.postMessage({
-      audio: recordedBlob,
-      model,
-      language,
-      subtask
+  // Fix the recording workflow
+const startRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder.current = new MediaRecorder(stream, {
+      mimeType: 'audio/webm' // Specify format for better compatibility
     });
-  };
+    audioChunks.current = [];
+    setRecordingTime(0);
+
+    mediaRecorder.current.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.current.push(event.data);
+      }
+    };
+
+    mediaRecorder.current.onstop = () => {
+      const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
+      setRecordedBlob(blob);
+      setAudioURL(URL.createObjectURL(blob));
+      
+      // Stop all tracks
+      stream.getTracks().forEach(track => track.stop());
+      clearInterval(recordingTimer.current);
+      
+      console.log('Recording stopped, blob created:', blob); // Debug log
+    };
+
+    mediaRecorder.current.start();
+    setIsRecording(true);
+    
+    recordingTimer.current = setInterval(() => {
+      setRecordingTime(prev => prev + 1);
+    }, 1000);
+  } catch (error) {
+    console.error('Error starting recording:', error);
+  }
+};
+
+const submitRecording = () => {
+  if (!recordedBlob) {
+    console.error('No recorded audio available');
+    return;
+  }
+  
+  console.log('Submitting recording for transcription...'); // Debug log
+  
+  setIsTranscribing(true);
+  setTranscription('');
+  setProgressItems([]);
+  
+  worker.current.postMessage({
+    audio: recordedBlob,
+    model,
+    language,
+    subtask
+  });
+};
+
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
