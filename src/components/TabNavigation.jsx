@@ -5,7 +5,8 @@ function TabNavigation({ activeTab, onTabChange }) {
   const tabs = [
     { id: 'translator', label: 'Translation', icon: '🌐' },
     { id: 'whisper', label: 'Speech to Text', icon: '🎤' },
-    { id: 'direct', label: 'Model Test', icon: '🧪' }
+    { id: 'direct', label: 'Model Test', icon: '🧪' },
+     { id: 'presentation', label: 'Presentation', icon: '📊' }
   ];
 
   return (

@@ -6,6 +6,7 @@ import TabNavigation from './components/TabNavigation';
 import WhisperTab from './components/WhisperTab';
 import { pipeline } from '@xenova/transformers';
 import { webmFixDuration } from './utils/BlobFix';
+import PresentationPage from './components/PresentationPage';
 
 function App() {
 
@@ -219,7 +220,7 @@ useEffect(() => {
           </div>
         );
       
-        case 'direct':
+      case 'direct':
   return (
     <div className="translator-card">
       <h2 className="section-title">Direct Whisper Model Test</h2>
@@ -260,6 +261,14 @@ useEffect(() => {
       )}
     </div>
   );
+      
+      case 'presentation':
+  return (
+    <div className="translator-card">
+      <PresentationPage />
+    </div>
+  );
+
       default:
         return (
           <div className="translator-card">
