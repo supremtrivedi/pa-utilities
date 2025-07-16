@@ -4,8 +4,66 @@ import LanguageSelector from './components/LanguageSelector';
 import Progress from './components/Progress';
 import TabNavigation from './components/TabNavigation';
 import WhisperTab from './components/WhisperTab';
+import { pipeline } from '@xenova/transformers';
+import { webmFixDuration } from './utils/BlobFix';
 
 function App() {
+
+  const [directFile, setDirectFile] = useState(null);
+  const [fixedBlob, setFixedBlob] = useState(null);
+
+  const [directResult, setDirectResult] = useState('');
+  const [directLoading, setDirectLoading] = useState(false);
+
+  const handleDirectFileChange = async (e) => {
+  const file = e.target.files[0];
+  setDirectFile(file);
+  setDirectResult('');
+  setFixedBlob(null);
+
+  // Only fix if the file is webm (recorded in app)
+  if (file && file.type === 'audio/webm') {
+    const objectUrl = URL.createObjectURL(file);
+    const audio = new Audio(objectUrl);
+
+    audio.addEventListener('loadedmetadata', async () => {
+      // Duration in seconds, multiplied by 1000 for ms
+      const fixed = await webmFixDuration(file, audio.duration * 1000);
+      setFixedBlob(fixed);
+    });
+    // Trigger metadata loading
+    audio.load();
+  }
+};
+
+const handleDirectTranscribe = async () => {
+  setDirectLoading(true);
+  setDirectResult('');
+  try {
+    const asr = await pipeline(
+      'automatic-speech-recognition',
+      'Xenova/whisper-tiny.en'
+    );
+    // Use fixedBlob if available, otherwise use directFile
+    const input = fixedBlob || directFile;
+    const result = await asr(input, {
+      language: 'english',
+      task: 'transcribe',
+      chunk_length_s: 30,
+      stride_length_s: 5,
+      return_timestamps: true,
+      top_k: 0,
+      do_sample: false,
+      force_full_sequences: false
+    });
+    setDirectResult(JSON.stringify(result, null, 2));
+  } catch (err) {
+    setDirectResult('ERROR: ' + String(err));
+  }
+  setDirectLoading(false);
+};
+
+  
   const [activeTab, setActiveTab] = useState('translator');
   const [sourceLanguage, setSourceLanguage] = useState('eng_Latn');
   const [targetLanguage, setTargetLanguage] = useState('fra_Latn');
@@ -161,6 +219,47 @@ useEffect(() => {
           </div>
         );
       
+        case 'direct':
+  return (
+    <div className="translator-card">
+      <h2 className="section-title">Direct Whisper Model Test</h2>
+      <div style={{ marginBottom: 16 }}>
+        Select an audio file (webm, mp3, wav, etc) and run the Whisper model <b>directly in-browser</b>. This bypasses your worker and UI.
+      </div>
+      <input
+        type="file"
+        accept="audio/*,video/*"
+        disabled={directLoading}
+        onChange={handleDirectFileChange}
+        style={{marginBottom: 12}}
+      />
+      {directFile && (
+        <div style={{ margin: '10px 0' }}>
+          <strong>Selected file:</strong> {directFile.name}
+          <audio controls src={URL.createObjectURL(directFile)} style={{ display: 'block', marginTop: 8 }} />
+          <button
+            disabled={directLoading}
+            className="btn-primary"
+            onClick={handleDirectTranscribe}
+            style={{ marginTop: 10 }}
+          >
+            {directLoading ? 'Transcribing…' : 'Direct Transcribe'}
+          </button>
+        </div>
+      )}
+      {directResult && (
+        <pre style={{
+          background: '#f4f4f4',
+          maxHeight: 250,
+          overflow: 'auto',
+          marginTop: 10,
+          border: '1px solid #DDD',
+          padding: 10,
+          borderRadius: 4
+        }}>{directResult}</pre>
+      )}
+    </div>
+  );
       default:
         return (
           <div className="translator-card">

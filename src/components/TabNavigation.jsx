@@ -4,7 +4,8 @@ import './TabNavigation.css';
 function TabNavigation({ activeTab, onTabChange }) {
   const tabs = [
     { id: 'translator', label: 'Translation', icon: '🌐' },
-    { id: 'whisper', label: 'Speech to Text', icon: '🎤' }
+    { id: 'whisper', label: 'Speech to Text', icon: '🎤' },
+    { id: 'direct', label: 'Model Test', icon: '🧪' }
   ];
 
   return (
