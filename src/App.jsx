@@ -4,9 +4,10 @@ import LanguageSelector from './components/LanguageSelector';
 import Progress from './components/Progress';
 import TabNavigation from './components/TabNavigation';
 import WhisperTab from './components/WhisperTab';
-import { pipeline } from '@xenova/transformers';
+import { pipeline, read_audio } from '@xenova/transformers';
 import { webmFixDuration } from './utils/BlobFix';
 import PresentationPage from './components/PresentationPage';
+//import { read_audio } from "./utils.js";
 
 function App() {
 
@@ -41,22 +42,22 @@ const handleDirectTranscribe = async () => {
   setDirectLoading(true);
   setDirectResult('');
   try {
-    const asr = await pipeline(
+    const transcriber = await pipeline(
       'automatic-speech-recognition',
-      'Xenova/whisper-tiny.en'
+      'xenova/whisper-tiny.en',
+      { dtype: { encoder_model: "fp32", decoder_model_merged: "q4" } },
     );
     // Use fixedBlob if available, otherwise use directFile
     const input = fixedBlob || directFile;
-    const result = await asr(input, {
-      language: 'english',
-      task: 'transcribe',
-      chunk_length_s: 30,
-      stride_length_s: 5,
-      return_timestamps: true,
-      top_k: 0,
-      do_sample: false,
-      force_full_sequences: false
-    });
+     const blobUrl = URL.createObjectURL(input);
+
+    // Load audio data
+const audio = await read_audio(
+  blobUrl,
+  transcriber.processor.feature_extractor.config.sampling_rate,
+);
+
+    const result = await transcriber(audio);
     setDirectResult(JSON.stringify(result, null, 2));
   } catch (err) {
     setDirectResult('ERROR: ' + String(err));
